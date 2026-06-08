@@ -12,7 +12,7 @@ dt
 ,if(length(manager_code)=6,concat('10',manager_code),manager_code) as manager_code
 ,manager_name
 from data_build.pdw_opc_shop_ehr_staff_dept_view 
-where dt >='20260401' -- 算薪月首日
+where dt >='20260501' -- 算薪月首日
 and dept_code in ('100000232',
 '100000367',
 '100001053',
@@ -155,7 +155,7 @@ group by dept_code
 ,manager_code
 ,manager_name
 ) tt 
-where b_manager_date >'2026-04-01' -- 算薪月首日
+where b_manager_date >'2026-05-01' -- 算薪月首日
 )
 
 ,sell_price_list as (

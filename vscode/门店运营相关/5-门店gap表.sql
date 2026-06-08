@@ -2029,6 +2029,192 @@ left join district_staff_num t2 on substr(t1.store_city,1,length(t1.store_city)-
 where substr(t1.store_city,1,length(t1.store_city)-1) in ('上海','南京','杭州')
 ;
 
+drop table if exists data_build.tmp_gap_district_new_${DATE}; --20260521新增
+create table data_build.tmp_gap_district_new_${DATE} as
+--机动队gap(北京天津)
+with district_use_raw_list as(
+select a.*,
+case b.business_district_id
+when '1000'then '区X001北京' when '1001'then '区X002北京' when '1002'then '区X003北京' when '1232'then '区X004天津' when '1231'then '区X005天津'
+when '1018'then '区X006上海' when '1101'then '区X007南京' when '1094'then '区X008杭州' when '1074'then '区X009济南' when '6120'then '区X010宁波'
+when '1080'then '区X012青岛' when '10012'then '区X013北京' when '10013'then '区X014北京' when '10014'then '区X015北京' when '10015'then '区X016北京'
+when '10016'then '区X017北京' when '1230'then '区X018天津' when '1019'then '区X019上海' when '1100'then '区X020南京' when '1070'then '区X021济南'
+when '10018'then '区X024北京' when '1880'then '区X027廊坊' when '1030'then '区X028石家庄' when '1210'then '区X029郑州' when '3970'then '区X030常州'
+when '6121'then '区X031宁波' when '1110'then '区X032苏州' when '1182'then '区X033无锡' when '2330'then '区X034金华' when '2320'then '区X035温州'
+when '1003'then '区X036北京' when '1004'then '区X037北京' when '1005'then '区X038北京' when '1006'then '区X039北京' when '1007'then '区X040北京'
+when '1008'then '区X041北京' when '1009'then '区X042北京' when '10010'then '区X043北京' when '10011'then '区X044北京' when '10017'then '区X045北京'
+when '1233'then '区X046天津' when '1234'then '区X047天津' when '1235'then '区X048天津' when '1236'then '区X049天津' when '1237'then '区X050天津'
+when '1238'then '区X051天津' when '1239'then '区X052天津' when '3971'then '区X053常州' when '1093'then '区X054杭州' when '1092'then '区X055杭州'
+when '1091'then '区X056杭州' when '1090'then '区X057杭州' when '1071'then '区X058济南' when '1072'then '区X059济南' when '1073'then '区X060济南'
+when '1102'then '区X061南京' when '1103'then '区X062南京' when '1104'then '区X063南京' when '1105'then '区X064南京' when '1106'then '区X065南京'
+when '1107'then '区X066南京' when '1211'then '区X067郑州' when '1181'then '区X068无锡' when '1180'then '区X069无锡' when '1113'then '区X070苏州'
+when '1112'then '区X071苏州' when '1081'then '区X072青岛' when '1082'then '区X073青岛' when '6123'then '区X074宁波' when '6122'then '区X075宁波'
+when '1011'then '区X076上海' when '1012'then '区X077上海' when '1013'then '区X078上海' when '1014'then '区X079上海' when '1015'then '区X080上海'
+when '1016'then '区X081上海' when '1017'then '区X082上海' when '1018'then '区X083上海' else null end as business_district_id,
+case when a.work_shift_second_desc in ('上货支援','普通','临时店长班次','储备班次','困难店整改','复业工时','撤店工时','效期整改班次','新店建店','机动队支援加盟店班次','机动队效期检查','机动队月盘','远程支援','陈列工时')
+then 1 else 0 end as is_special,
+case when a.work_shift_second_desc in ('上货支援','普通','专项整改','临时店长班次','储备班次','困难店整改','复业工时','撤店工时','效期整改班次','新店建店','机动队支援加盟店班次','机动队效期检查','机动队月盘','远程支援','陈列工时')
+or a.day_manager_info = 1 or a.night_manager_info = 1 or a.roster_peace_info = 1  then  1 else 0 end as is_general
+from data_smartorder.dm_roster_tmp_use_ratio a
+left join data_smartorder.ods_uploads_business_district_qiyang b on a.store_code = b.store_code
+where a.dt = '${DATE}'
+and a.hps_dept_descr_lv1 = '运营管理部X'
+and a.work_shift_second_desc not in ('机动队新人班次','机动队岗前培训班次','岗前培训班次')
+)
+
+,district_attendance as(--每个商圈的出勤
+select 
+work_shift_date,
+business_district_id,
+count(distinct case when is_special = 1 then concat(employee_no,work_shift_date) end ) as is_special_cnt,
+count(distinct case when is_general = 1 then concat(employee_no,work_shift_date)  end ) as is_general_cnt
+from district_use_raw_list
+group by
+work_shift_date,
+business_district_id
+)
+
+,hps_dept_descr_lv5_attendance as(--每个商圈实际员工
+select 
+work_shift_date,
+hps_dept_descr_lv5,
+count(distinct concat(employee_no,work_shift_date)) as employee_num 
+from district_use_raw_list
+group by
+work_shift_date,
+hps_dept_descr_lv5
+)
+
+,final_district_use as(
+select
+a.work_shift_date,
+a.business_district_id,
+a.is_special_cnt,
+a.is_general_cnt,
+b.employee_num,
+nvl(a.is_special_cnt/b.employee_num,1) as special_rate,
+nvl(a.is_general_cnt/b.employee_num,1) as general_rate
+from district_attendance a
+left join hps_dept_descr_lv5_attendance b on a.work_shift_date = b.work_shift_date and a.business_district_id = b.hps_dept_descr_lv5
+)
+
+,district_usage_prep_data as (
+    select
+    business_district_id
+    ,case business_district_id
+        when '区X001北京' then '1000' when '区X002北京' then '1001'
+        when '区X003北京' then '1002' when '区X004天津' then '1232'
+        when '区X005天津' then '1231' when '区X006上海' then '1018'
+        when '区X007南京' then '1101'
+        when '区X008杭州' then '1094'when '区X009济南' then '1074'
+        when '区X010宁波' then '6120' when '区X012青岛' then '1080'
+        when '区X013北京' then '10012' when '区X014北京' then '10013'
+        when '区X015北京' then '10014' when '区X016北京' then '10015'
+        when '区X017北京' then '10016'
+        when '区X018天津' then '1230' when '区X019上海' then '1019'
+        when '区X020南京' then '1100' when '区X021济南' then '1070'
+        when '区X024北京' then '10018' when '区X027廊坊' then '1880'
+        when '区X028石家庄' then '1030' when '区X029郑州' then '1210'
+        when '区X030常州' then '3970' when '区X031宁波' then '6121'
+        when '区X032苏州' then '1110' when '区X033无锡' then '1182'
+        when '区X034金华' then '2330' when '区X035温州' then '2320'
+        when '区X036北京' then '1003' when '区X037北京' then '1004'
+        when '区X038北京' then '1005'
+        when '区X039北京' then '1006' when '区X040北京' then '1007'
+        when '区X041北京' then '1008'
+        when '区X042北京' then '1009' when '区X043北京' then '10010'
+        when '区X044北京' then '10011'when '区X045北京' then '10017'
+        when '区X046天津' then '1233' when '区X047天津' then '1234'
+        when '区X048天津' then '1235' when '区X049天津' then '1236'
+        when '区X050天津' then '1237'
+        when '区X051天津' then '1238' when '区X052天津' then '1239'
+        when '区X053常州' then '3971' when '区X054杭州' then '1093'
+        when '区X055杭州' then '1092' when '区X056杭州' then '1091'
+        when '区X057杭州' then '1090' when '区X058济南' then '1071'
+        when '区X059济南' then '1072' when '区X060济南' then '1073'
+        when '区X061南京' then '1102' when '区X062南京' then '1103'
+        when '区X063南京' then '1104' when '区X064南京' then '1105'
+        when '区X065南京' then '1106'
+        when '区X066南京' then '1107' when '区X067郑州' then '1211'
+        when '区X068无锡' then '1181' when '区X069无锡' then '1180'
+        when '区X070苏州' then '1113' when '区X071苏州' then '1112'
+        when '区X072青岛' then '1081' when '区X073青岛' then '1082'
+        when '区X074宁波' then '6123' when '区X075宁波' then '6122'
+        when '区X076上海' then '1011' when '区X077上海' then '1012'
+        when '区X078上海' then '1013'
+        when '区X079上海' then '1014' when '区X080上海' then '1015'
+        when '区X081上海' then '1016' when '区X082上海' then '1017'
+        when '区X083上海' then '1018' else business_district_id end as district_code
+    
+    ,max(is_special_cnt) as max_is_special_cnt
+
+    ,AVG(CASE WHEN work_shift_date BETWEEN date_sub(from_unixtime(unix_timestamp('${DATE}','yyyyMMdd'),'yyyy-MM-dd'),15)  AND date_sub(from_unixtime(unix_timestamp('${DATE}','yyyyMMdd'),'yyyy-MM-dd'),1) THEN special_rate ELSE NULL END) AS special_rate_night_14days
+    ,AVG(CASE WHEN work_shift_date BETWEEN date_sub(from_unixtime(unix_timestamp('${DATE}','yyyyMMdd'),'yyyy-MM-dd'),15)  AND date_sub(from_unixtime(unix_timestamp('${DATE}','yyyyMMdd'),'yyyy-MM-dd'),1) THEN general_rate ELSE NULL END) as general_rate_night_14days
+
+from final_district_use
+where work_shift_date BETWEEN date_sub(from_unixtime(unix_timestamp('${DATE}','yyyyMMdd'),'yyyy-MM-dd'),15)  AND date_sub(from_unixtime(unix_timestamp('${DATE}','yyyyMMdd'),'yyyy-MM-dd'),1)
+group by business_district_id
+)
+
+--每个商圈在职的机动队人数(非黑名单非离职中)
+,district_staff_num as(
+select
+hps_d_city
+,t4.business_district_id
+,count(1) as district_staff_num
+from data_build.pdw_psprod_ps_blf_ehr_pers_vw_view t1
+left join (
+        select distinct 
+        employee_no
+        ,lpad(employee_no,8,'10') as staff_code
+    from data_shop.pdw_idss_ipes_admin_employee_blacklist_view -- 全量黑名单表
+    where dt = '${DATE}'
+        and valid_status=1 
+        and start_date <= from_unixtime(unix_timestamp('${DATE}','yyyymmdd'),'yyyy-mm-dd')
+        and end_date >= from_unixtime(unix_timestamp('${DATE}','yyyymmdd'),'yyyy-mm-dd')
+    ) t2 on lpad(t1.emplid,8,'10') = t2.staff_code 
+left join (
+        select distinct
+        t1.man_code as user_job_number
+        ,lpad(t1.man_code,8,10) as staff_code
+        ,t1.order_status
+        ,date_format(create_time,'yyyy-MM-dd') as create_date
+        ,date_format(final_leave_date,'yyyy-MM-dd') as leave_date
+        ,'1' as is_leaving
+    from data_shop.pdw_gis_workday_dimission_order_view t1
+    where t1.dt = '${DATE}'
+        and (t1.order_status = 'PROCESSING')
+            or (date_format(final_leave_date,'yyyyMMdd') > t1.dt and final_leave = 'noleave' and t1.order_status = 'FINISHED')
+    ) t3 on lpad(t1.emplid,8,'10') = t3.staff_code
+left join data_smartorder.ods_uploads_operation_x_business_district_qiyang t4 
+on t1.hps_dept_descr_lv5 = t4.operation_x
+where t1.dt = '${DATE}'
+and t1.hps_dept_descr_lv5 like '%区X%'
+and t1.hps_d_hr_status ='在职'
+and t2.staff_code is null --非黑名单
+and t3.staff_code is null --非离职中
+group by
+hps_d_city
+,t4.business_district_id
+)
+
+select
+t1.business_district_id
+,t1.district_code
+,t1.max_is_special_cnt
+,t1.special_rate_night_14days
+,t1.general_rate_night_14days
+,nvl(t2.district_staff_num,0) as district_staff_num
+,t1.max_is_special_cnt/6*7*1.05 as need_staff_1
+,t1.special_rate_night_14days*nvl(t2.district_staff_num,0)/0.85 as need_staff_2
+,round((t1.max_is_special_cnt/6*7*1.05+t1.special_rate_night_14days*nvl(t2.district_staff_num,0)/0.85)/2,0) as need_staff
+,if(t1.special_rate_night_14days<0.85,0,if(round((t1.max_is_special_cnt/6*7*1.05+t1.special_rate_night_14days*nvl(t2.district_staff_num,0)/0.85)/2,0)-nvl(t2.district_staff_num,0)<0,0,
+round((t1.max_is_special_cnt/6*7*1.05+t1.special_rate_night_14days*nvl(t2.district_staff_num,0)/0.85)/2,0)-nvl(t2.district_staff_num,0))) as gap_all_district
+from district_usage_prep_data t1
+left join district_staff_num t2 on t1.district_code = t2.business_district_id
+;
+
+
 insert overwrite table ${TABLE_NAME} partition (dt='$DATE')
 
 select distinct
@@ -2168,21 +2354,13 @@ store_code
 ,roster_gap_night as roster_gap_night
 ,reward_level_retention as reward_level_retention
 ,reward_level_night_retention as reward_level_night_retention
-,nvl(district_code,0) as district_code
+,nvl(tt.district_code,0) as district_code
 ,nvl(hc_all_district,0) as hc_all_district
 ,nvl(hc_night_district,0) as hc_night_district
 ,nvl(hc_day_district,0) as hc_day_district
-,case when district_code in ('1090','1104','1016') then t5.gap_all_district else --上海南京杭州门店最多的商圈
-IF(CASE
-when district_code in ('10019','1101','1102','1103','1012','1018','1014','1015','1011') --上海南京杭州只保留一个店最多的商圈
-then -1
-WHEN NVL(tt.gap_all_district, 0) > NVL(hc_all_district, 0) THEN 0 
-ELSE NVL(tt.gap_all_district, 0) END < 0, 
-0, 
-CASE 
-WHEN NVL(tt.gap_all_district, 0) > NVL(hc_all_district, 0) THEN NVL(tt.gap_all_district, 0) - NVL(hc_all_district, 0)
-ELSE NVL(tt.gap_all_district, 0) 
-END) end AS gap_all_district
+,case when tt.district_code in ('1090','1104','1016') then t5.gap_all_district --上海南京杭州门店最多的商圈
+when tt.district_code in ('10019','1101','1102','1103','1012','1018','1014','1015','1011') then 0 --上海南京杭州只保留一个店最多的商圈
+else t6.gap_all_district end AS gap_all_district
 ,IF(CASE 
 WHEN NVL(gap_day_district, 0) > NVL(hc_day_district, 0) THEN 0 
 ELSE NVL(gap_day_district, 0) END < 0, 
@@ -2195,7 +2373,7 @@ ELSE NVL(gap_night_district, 0) END < 0,
 0, 
 CASE WHEN NVL(gap_night_district, 0) > NVL(hc_night_district, 0) THEN NVL(gap_night_district, 0) - NVL(hc_night_district, 0) 
 ELSE NVL(gap_night_district, 0) END) AS gap_night_district
-,nvl(CASE when district_code in ('10019','1018','1011','1015')
+,nvl(CASE when tt.district_code in ('10019','1018','1011','1015')
 then 'p1' else
 reward_level_district end,0) as reward_level_district
 ,nvl(reward_level_night_district,0) as reward_level_night_district
@@ -2401,6 +2579,7 @@ hps_dept_code_lv5
 from data_build.pdw_psprod_ps_blf_ehr_pers_vw_view
 where dt = '20260415') t4 on t3.operation_x = t4.hps_dept_descr_lv5
 left join data_build.tmp_gap_district_${DATE} t5 on tt.city_name = t5.store_city
+left join data_build.tmp_gap_district_new_${DATE} t6 on tt.district_code = t6.district_code
 where store_code <> '110000176'
 
 
