@@ -19,7 +19,7 @@ select
 from data_shop.dwd_ic_new_import_store_level_da_view
 where dt = '${today-1}' 
 -- and final_level_modify in ('T5','T6') 
- and alarm_start_date between '2026-04-01' and '2026-04-30' --记得改这个
+ and alarm_start_date between '2026-05-01' and '2026-05-31' --记得改这个
 group by shop_id
 
 
@@ -39,7 +39,7 @@ select
 from data_smartorder.dw_roster_attendance_shift_ha t1
 left join data_build.dw_roster_effect_roster_detail_info_da_view  t2 on t2.roster_id = t1.roster_system_id and t2.dt = '${today}'
 where  t1.dt = '${today}'
-and  t1.work_shift_date between '2026-04-01' and '2026-04-30'
+and  t1.work_shift_date between '2026-05-01' and '2026-05-31'
 --and work_shift_date >= '2023-05-30'
 and  t1.type = 1
 and  t1.store_name not like '%饮品站%'
@@ -86,7 +86,7 @@ count(distinct dt) as store_days
  ,lpad(emplid,8,'10') as staff_code,
  hps_dept_code_lv5 as sec_store_code-- 店
  from data_build.pdw_psprod_ps_blf_ehr_pers_vw_view 
- where dt between 20260401 and 20260430
+ where dt between 20260501 and 20260531
     and hps_d_jobcode in ('店副经理')
     and hps_d_hr_status = '在职'
     group by emplid
@@ -134,7 +134,7 @@ and t.store_type = '0'
 and t.order_status = 'FINISHED'
 and t.sku_class_code not in ('86','50')
 and t.sku_quantity > 0
-and t.order_date between '2026-04-01' and '2026-04-30' --记得改这个
+and t.order_date between '2026-05-01' and '2026-05-31' --记得改这个
 group by 
 trunc(order_date,'MM')
 ,t.store_code 
